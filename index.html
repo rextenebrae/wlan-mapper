@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="WLAN-Mapper">
+<title>WLAN-Mapper — Signal-Ausmessung für Techniker</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="app" id="appShell">
+
+  <!-- ======= Kopfleiste ======= -->
+  <header class="topbar">
+    <button class="tool tool-plain btn-sidebar" id="btnSidebar" title="Projektdaten &amp; Einstellungen" aria-label="Seitenleiste umschalten">☰</button>
+    <div class="brand">
+      <span class="brand-mark">▲</span>
+      <span class="brand-name">WLAN<em>Mapper</em></span>
+      <span class="brand-sub">Signal-Ausmessung</span>
+    </div>
+
+    <div class="toolbar" role="toolbar" aria-label="Werkzeuge">
+      <button class="tool" data-mode="pan"       title="Verschieben / Auswählen (V)"><span class="tool-ico">✥</span><span class="tool-label">Bewegen</span></button>
+      <button class="tool" data-mode="room"      title="Raum als Polygon zeichnen (R)"><span class="tool-ico">▱</span><span class="tool-label">Raum</span></button>
+      <button class="tool" data-mode="measure"   title="Messpunkt setzen (M)"><span class="tool-ico">◉</span><span class="tool-label">Messen</span></button>
+      <button class="tool" data-mode="calibrate" title="Maßstab über Referenzstrecke setzen (K)"><span class="tool-ico">↔</span><span class="tool-label">Kalibrieren</span></button>
+      <button class="tool" data-mode="erase"     title="Element löschen (E)"><span class="tool-ico">✕</span><span class="tool-label">Löschen</span></button>
+      <span class="toolbar-sep"></span>
+      <button class="tool tool-plain" id="btnUndo" title="Letzten Schritt rückgängig (Strg+Z)">↩<span class="tool-label"> Rückgängig</span></button>
+      <button class="tool tool-plain" id="btnZoomOut" title="Herauszoomen">−</button>
+      <button class="tool tool-plain" id="btnZoomIn" title="Hineinzoomen">+</button>
+      <button class="tool tool-plain" id="btnZoomFit" title="Alles anzeigen">⤢<span class="tool-label"> Übersicht</span></button>
+    </div>
+
+    <div class="topbar-right">
+      <span class="agent-chip" id="agentChip" title="Lokaler Signal-Agent (signal-agent.ps1)">
+        <span class="agent-dot" id="agentDot"></span><span id="agentLabel">Agent aus</span>
+      </span>
+      <button class="btn btn-primary" id="btnPdf">PDF<span class="tool-label">-Report</span></button>
+    </div>
+  </header>
+
+  <div class="workspace">
+
+    <!-- ======= Seitenleiste ======= -->
+    <aside class="sidebar">
+
+      <details class="panel" open>
+        <summary>Projekte <span class="count-badge" id="projCount">1</span></summary>
+        <div class="panel-body">
+          <select id="projSelect" aria-label="Aktives Projekt"></select>
+          <div class="proj-actions">
+            <button class="btn btn-ghost btn-sm" id="projNew">+ Neu</button>
+            <button class="btn btn-ghost btn-sm" id="projRename">Umbenennen</button>
+            <button class="btn btn-danger btn-sm" id="projDelete">Löschen</button>
+          </div>
+          <p class="hint">Jedes Projekt hat eigenen Grundriss, Messpunkte und Kundendaten — z. B. ein Projekt pro Kunde oder pro Etage.</p>
+        </div>
+      </details>
+
+      <details class="panel" open>
+        <summary>Projektdaten</summary>
+        <div class="panel-body form-grid">
+          <label>Kunde <input id="mKunde" placeholder="z. B. Bäckerei Huber"></label>
+          <label>Objekt / Raum <input id="mObjekt" placeholder="z. B. EG Verkaufsraum"></label>
+          <label>Techniker <input id="mTechniker" placeholder="Name"></label>
+          <label>Datum <input id="mDatum" type="date"></label>
+          <label>SSID <input id="mSsid" placeholder="Netzwerkname"></label>
+          <label>Frequenzband
+            <select id="mBand">
+              <option value="2,4 GHz">2,4 GHz</option>
+              <option value="5 GHz" selected>5 GHz</option>
+              <option value="6 GHz">6 GHz</option>
+              <option value="2,4 + 5 GHz">2,4 + 5 GHz</option>
+            </select>
+          </label>
+          <label>Bewertung / Empfehlung für den Report
+            <textarea id="mNotizen" rows="3" placeholder="Leer lassen für automatische Bewertung"></textarea>
+          </label>
+        </div>
+      </details>
+
+      <details class="panel" open>
+        <summary>Rundgang-Messung</summary>
+        <div class="panel-body">
+          <p class="hint">Der Standardweg — kein Grundriss nötig: Raumgröße angeben, am Startpunkt beginnen und <strong>im Uhrzeigersinn</strong> an der Wand entlanggehen. An jedem Messort auf <strong>Messen</strong> tippen — das Gerät misst selbst.</p>
+          <button class="btn btn-primary btn-walk" id="btnWalk">▶ Rundgang starten</button>
+        </div>
+      </details>
+
+      <details class="panel">
+        <summary>Grundriss (optional)</summary>
+        <div class="panel-body">
+          <p class="hint">Raum mit dem Werkzeug <strong>Raum</strong> zeichnen (Klicks setzen Ecken, Doppelklick schließt) — oder ein Foto/Scan des Grundrisses hinterlegen.</p>
+          <label class="file-btn">Grundriss-Bild laden…<input type="file" id="bgUpload" accept="image/*" hidden></label>
+          <div class="slider-row" id="bgOpacityRow" hidden>
+            <span>Bild-Deckkraft</span>
+            <input type="range" id="bgOpacity" min="10" max="100" value="60">
+          </div>
+          <div class="kv">
+            <span>Maßstab</span>
+            <span class="mono" id="scaleLabel">50 px = 1 m</span>
+          </div>
+          <p class="hint">Mit <strong>Kalibrieren</strong> zwei Punkte einer bekannten Strecke anklicken und die reale Länge eingeben.</p>
+          <button class="btn btn-ghost btn-sm" id="btnClearRooms">Grundriss leeren</button>
+        </div>
+      </details>
+
+      <details class="panel" open>
+        <summary>Heatmap</summary>
+        <div class="panel-body">
+          <label class="check-row"><input type="checkbox" id="heatToggle" checked> Heatmap anzeigen</label>
+          <div class="slider-row">
+            <span>Deckkraft</span>
+            <input type="range" id="heatOpacity" min="20" max="95" value="65">
+          </div>
+          <div class="slider-row">
+            <span>Reichweite <span class="mono" id="rangeLabel">4 m</span></span>
+            <input type="range" id="heatRange" min="2" max="12" value="4">
+          </div>
+          <div class="legend">
+            <div class="legend-bar"></div>
+            <div class="legend-ticks">
+              <span>−90</span><span>−80</span><span>−70</span><span>−60</span><span>−50 dBm</span>
+            </div>
+            <div class="legend-words"><span>schlecht</span><span>sehr gut</span></div>
+          </div>
+        </div>
+      </details>
+
+      <details class="panel" open>
+        <summary>Messpunkte <span class="count-badge" id="pointCount">0</span></summary>
+        <div class="panel-body">
+          <div class="point-list" id="pointList">
+            <p class="hint empty-note">Noch keine Messpunkte. Werkzeug <strong>Messen</strong> wählen und auf die Karte klicken.</p>
+          </div>
+          <div class="stats" id="statsBox" hidden>
+            <div class="stat"><span class="stat-val" id="statMin">–</span><span class="stat-key">min</span></div>
+            <div class="stat"><span class="stat-val" id="statAvg">–</span><span class="stat-key">Ø</span></div>
+            <div class="stat"><span class="stat-val" id="statMax">–</span><span class="stat-key">max</span></div>
+          </div>
+        </div>
+      </details>
+
+      <details class="panel">
+        <summary>Projekt speichern / laden</summary>
+        <div class="panel-body btn-col">
+          <button class="btn btn-primary btn-sm" id="btnServerPdf" hidden>PDF auf Server erzeugen</button>
+          <button class="btn btn-ghost btn-sm" id="btnExportJson">Projekt exportieren (.json)</button>
+          <label class="file-btn">Projekt importieren…<input type="file" id="importJson" accept=".json,application/json" hidden></label>
+          <button class="btn btn-danger btn-sm" id="btnReset">Alles zurücksetzen</button>
+          <p class="hint">Änderungen werden automatisch im Browser gespeichert.</p>
+        </div>
+      </details>
+
+    </aside>
+
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- ======= Karte ======= -->
+    <main class="map-area">
+      <canvas id="mapCanvas"></canvas>
+      <div class="map-hint" id="mapHint"></div>
+      <div class="map-legend" id="mapLegend">
+        <div class="legend-bar"></div>
+        <div class="legend-ticks"><span>−90</span><span>−70</span><span>−50 dBm</span></div>
+      </div>
+      <div class="walk-overlay" id="walkOverlay" hidden>
+        <div class="walk-card">
+          <div class="walk-phase" id="walkPhase">STOPP</div>
+          <div class="walk-sub" id="walkSub">Stehen bleiben — Messung läuft …</div>
+          <div class="walk-count mono" id="walkCount"></div>
+          <button class="btn btn-primary walk-measure" id="walkMeasure" hidden>📶 Messen</button>
+          <div class="walk-actions">
+            <button class="btn btn-primary" id="walkFinish">✔ Startpunkt erreicht — fertig</button>
+            <button class="btn btn-ghost" id="walkCancel">Abbrechen</button>
+          </div>
+        </div>
+      </div>
+      <div class="map-empty" id="mapEmpty" hidden>
+        <strong>So funktioniert's</strong>
+        <ol>
+          <li><strong>Raum</strong> wählen und den Grundriss abklicken — oder links ein Foto laden</li>
+          <li><strong>Messen</strong> wählen und an jeder Messposition tippen</li>
+          <li>Oben rechts den <strong>PDF-Report</strong> erzeugen</li>
+        </ol>
+      </div>
+    </main>
+  </div>
+
+  <!-- ======= Statuszeile ======= -->
+  <footer class="statusbar">
+    <span id="statusMode">Modus: Bewegen</span>
+    <span id="statusPos" class="mono">x 0,0 m · y 0,0 m</span>
+    <span id="statusZoom" class="mono">Zoom 100 %</span>
+    <span class="statusbar-spacer"></span>
+    <span class="mono muted">Mausrad: Zoom · Rechte Maustaste / Leertaste: Verschieben · Esc: Abbrechen</span>
+  </footer>
+</div>
+
+<!-- ======= Dialog: Messwert ======= -->
+<dialog id="measureDialog">
+  <form method="dialog" class="dlg">
+    <h3 id="dlgTitle">Messpunkt</h3>
+    <div class="dlg-signal">
+      <output class="dlg-dbm mono" id="dlgDbmOut">−65 dBm</output>
+      <span class="dlg-quality" id="dlgQuality">gut</span>
+    </div>
+    <input type="range" id="dlgDbm" min="-95" max="-30" step="1" value="-65">
+    <div class="dlg-presets">
+      <button type="button" data-dbm="-45">sehr gut</button>
+      <button type="button" data-dbm="-60">gut</button>
+      <button type="button" data-dbm="-72">mäßig</button>
+      <button type="button" data-dbm="-85">schlecht</button>
+    </div>
+    <button type="button" class="btn btn-ghost btn-sm" id="dlgAgent" hidden>⇣ Wert vom Agent übernehmen</button>
+    <label class="dlg-note">Anmerkung (optional)
+      <input id="dlgNote" placeholder="z. B. hinter Stahltür, Deckenhöhe 4 m">
+    </label>
+    <div class="dlg-actions">
+      <button type="button" class="btn btn-ghost" id="dlgCancel">Abbrechen</button>
+      <button type="submit" class="btn btn-primary" id="dlgSave" value="save">Speichern</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ======= Dialog: Projektname (Neu / Umbenennen) ======= -->
+<dialog id="nameDialog">
+  <form method="dialog" class="dlg">
+    <h3 id="nameDlgTitle">Neues Projekt</h3>
+    <label class="dlg-note">Projektname
+      <input id="nameDlgInput" maxlength="60" placeholder="z. B. Bäckerei Huber — EG" required>
+    </label>
+    <div class="dlg-actions">
+      <button type="button" class="btn btn-ghost" id="nameDlgCancel">Abbrechen</button>
+      <button type="submit" class="btn btn-primary" value="ok">Übernehmen</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ======= Dialog: Rundgang starten ======= -->
+<dialog id="walkDialog">
+  <form method="dialog" class="dlg">
+    <h3>Rundgang-Messung starten</h3>
+    <p class="hint">Ungefähre Raumgröße genügt — die Messpunkte werden gleichmäßig auf dem Raumumfang verteilt.</p>
+    <div class="walk-size">
+      <label class="dlg-note">Raumlänge (m)
+        <input id="walkL" type="number" min="1" max="100" step="0.5" value="8" required>
+      </label>
+      <label class="dlg-note">Raumbreite (m)
+        <input id="walkB" type="number" min="1" max="100" step="0.5" value="5" required>
+      </label>
+    </div>
+    <label class="dlg-note">Messung auslösen
+      <select id="walkMode">
+        <option value="tap" selected>Per Tipp — an jedem Messort auf „Messen“ tippen</option>
+        <option value="timer">Automatisch — Signal nach fester Gehzeit</option>
+      </select>
+    </label>
+    <label class="dlg-note" id="walkIntervalRow">Gehzeit zwischen den Messungen (Sekunden, nur „Automatisch“)
+      <input id="walkInterval" type="number" min="2" max="60" step="1" value="6">
+    </label>
+    <label class="check-row"><input type="checkbox" id="walkSound" checked> Ton-Signal (für iPhone — es kann nicht vibrieren)</label>
+    <div class="dlg-actions">
+      <button type="button" class="btn btn-ghost" id="walkCancelDlg">Abbrechen</button>
+      <button type="submit" class="btn btn-primary" value="ok">▶ Los am Startpunkt</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ======= Dialog: Kalibrierung ======= -->
+<dialog id="calibrateDialog">
+  <form method="dialog" class="dlg">
+    <h3>Maßstab kalibrieren</h3>
+    <p class="hint">Wie lang ist die markierte Strecke in der Realität?</p>
+    <label class="dlg-note">Länge in Metern
+      <input id="calMeters" type="number" min="0.1" step="0.1" value="5" required>
+    </label>
+    <div class="dlg-actions">
+      <button type="button" class="btn btn-ghost" id="calCancel">Abbrechen</button>
+      <button type="submit" class="btn btn-primary" value="ok">Übernehmen</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ======= PDF-Report (nur Druck) ======= -->
+<section class="report" id="report" aria-hidden="true">
+  <header class="rep-head">
+    <div>
+      <h1>WLAN-Ausmessung <span id="repObjekt"></span></h1>
+      <p class="rep-sub">Signalstärke-Messprotokoll</p>
+    </div>
+    <div class="rep-brand">▲ WLAN-Mapper</div>
+  </header>
+
+  <table class="rep-meta">
+    <tr><th>Kunde</th><td id="repKunde"></td><th>Datum</th><td id="repDatum"></td></tr>
+    <tr><th>Objekt / Raum</th><td id="repObjekt2"></td><th>Techniker</th><td id="repTechniker"></td></tr>
+    <tr><th>SSID</th><td id="repSsid"></td><th>Frequenzband</th><td id="repBand"></td></tr>
+  </table>
+
+  <figure class="rep-map">
+    <img id="repMapImg" alt="Signal-Heatmap des Raums">
+    <figcaption>
+      <div class="legend legend-print">
+        <div class="legend-bar"></div>
+        <div class="legend-ticks"><span>−90</span><span>−80</span><span>−70</span><span>−60</span><span>−50 dBm</span></div>
+        <div class="legend-words"><span>schlecht</span><span>sehr gut</span></div>
+      </div>
+    </figcaption>
+  </figure>
+
+  <div class="rep-stats" id="repStats"></div>
+
+  <h2>Messpunkte</h2>
+  <table class="rep-points" id="repPoints">
+    <thead><tr><th>Nr.</th><th>Position (x / y)</th><th>Signal</th><th>Bewertung</th><th>Anmerkung</th></tr></thead>
+    <tbody></tbody>
+  </table>
+
+  <h2>Bewertung &amp; Empfehlung</h2>
+  <p class="rep-reco" id="repReco"></p>
+
+  <footer class="rep-foot">
+    Erstellt mit WLAN-Mapper · <span id="repStamp"></span>
+  </footer>
+</section>
+
+<script src="app.js"></script>
+<script src="walk.js"></script>
+<script src="report.js"></script>
+<script>
+// Service Worker: macht die installierte App offline nutzbar (nur in sicherem Kontext möglich).
+// Mit ?nosw in der URL wird er deregistriert und übersprungen (für Entwicklung/Tests;
+// nach dem Deregistrieren einmal neu laden, damit die Seite nicht mehr kontrolliert wird).
+if ('serviceWorker' in navigator) {
+  if (location.search.includes('nosw')) {
+    navigator.serviceWorker.getRegistrations()
+      .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+      .then((res) => { if (res.some(Boolean)) location.reload(); });
+  } else if (location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname)) {
+    navigator.serviceWorker.register('sw.js').catch(() => { /* offline-Cache dann nicht verfügbar */ });
+  }
+}
+</script>
+</body>
+</html>
